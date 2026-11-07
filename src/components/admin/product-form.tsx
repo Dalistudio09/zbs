@@ -1,27 +1,19 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ImagePlus, Trash2, X } from "lucide-react";
+import { ImagePlus, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { adminDeleteProduct, adminSaveProduct } from "@/fn/admin";
+import { adminSaveProduct } from "@/fn/admin";
 import { compressImageFile } from "@/lib/shop/compress";
-import type { Product, ProductAttributes, ProductNotes } from "@/lib/shop/types";
+import type { Gender, Product, ProductAttributes, ProductNotes } from "@/lib/shop/types";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 
-const VOLUMES = ["30 мл", "50 мл", "100 мл"] as const;
-
 type DraftImage = { id?: string; src: string; dataBase64?: string };
 
-function onShelf(product?: Product | null) {
+function listed(product?: Product | null) {
   if (!product) return true;
-  return product.visible && product.availability !== "hidden";
-}
-
-function keptUrl(img: DraftImage): string | undefined {
-  if (img.dataBase64 || !img.src) return undefined;
-  if (img.src.startsWith("data:") || img.src.startsWith("/api/images/")) return undefined;
-  return img.src;
+  return product.visible && product.availability !== "hidden" && Number(product.attributes.stock ?? 1) > 0;
 }
 
 export function ProductForm({ product }: { product?: Product | null }) {
@@ -30,12 +22,10 @@ export function ProductForm({ product }: { product?: Product | null }) {
   const [name, setName] = useState(product?.name ?? "");
   const [brand, setBrand] = useState(product?.brand ?? "");
   const [price, setPrice] = useState(product ? String(product.priceKzt) : "");
-  const [oldPrice, setOldPrice] = useState(
-    product?.oldPriceKzt ? String(product.oldPriceKzt) : "",
-  );
   const [description, setDescription] = useState(product?.description ?? "");
-  const [listed, setListed] = useState(onShelf(product));
-  const [volume, setVolume] = useState(product?.attributes.volume || "50 мл");
+  const [family, setFamily] = useState(product?.attributes.family ?? "");
+  const [gender, setGender] = useState<Gender>(product?.attributes.gender ?? "unisex");
+  const [onShelf, setOnShelf] = useState(listed(product));
   const notes = (product?.attributes.notes ?? {}) as ProductNotes;
   const [top, setTop] = useState(notes.top ?? "");
   const [heart, setHeart] = useState(notes.heart ?? "");
@@ -60,20 +50,29 @@ export function ProductForm({ product }: { product?: Product | null }) {
     setImages(next);
   }
 
+  function imageUrl(img: DraftImage): string | undefined {
+    if (img.dataBase64) return undefined;
+    if (!img.src || img.src.startsWith("data:") || img.src.startsWith("/api/images/")) return undefined;
+    return img.src;
+  }
+
   async function onSave() {
-    if (images.length === 0) {
-      toast.error("Добавьте хотя бы одно фото");
+    if (!name.trim() || !brand.trim()) {
+      toast.error("Укажите бренд и название");
       return;
     }
-    if (!name.trim()) {
-      toast.error("Укажите название");
+    if (images.length === 0) {
+      toast.error("Добавьте фото");
       return;
     }
     setBusy(true);
     try {
       const attributes: ProductAttributes = {
-        gender: product?.attributes.gender ?? "unisex",
-        volume,
+        gender,
+        family: family.trim(),
+        stock: onShelf ? Math.max(1, Number(product?.attributes.stock ?? 1)) : 0,
+        year: product?.attributes.year,
+        perfumer: product?.attributes.perfumer,
         notes: { top, heart, base },
       };
       const result = await adminSaveProduct({
@@ -83,15 +82,15 @@ export function ProductForm({ product }: { product?: Product | null }) {
           brand,
           sku: product?.sku ?? "",
           priceKzt: Number(price.replace(/\s/g, "")),
-          oldPriceKzt: oldPrice ? Number(oldPrice.replace(/\s/g, "")) : null,
+          oldPriceKzt: null,
           description,
-          availability: listed ? "in_stock" : "hidden",
-          visible: listed,
+          availability: onShelf ? "in_stock" : "hidden",
+          visible: onShelf,
           attributes,
           images: images.map((img) => ({
             id: img.id,
             dataBase64: img.dataBase64,
-            url: keptUrl(img),
+            url: imageUrl(img),
             mime: "image/jpeg",
           })),
         },
@@ -103,34 +102,15 @@ export function ProductForm({ product }: { product?: Product | null }) {
       await qc.invalidateQueries({ queryKey: ["catalog"] });
       await qc.invalidateQueries({ queryKey: ["admin-products"] });
       await qc.invalidateQueries({ queryKey: ["product"] });
-      toast.success(listed ? "Сохранено — уже на витрине" : "Сохранено, скрыто с витрины");
+      toast.success("Сохранено");
       navigate({ to: "/admin/products" });
     } finally {
       setBusy(false);
     }
   }
-
-  async function onDelete() {
-    if (!product) return;
-    if (!confirm("Удалить этот аромат?")) return;
-    setBusy(true);
-    try {
-      await adminDeleteProduct({ data: { id: product.id } });
-      await qc.invalidateQueries({ queryKey: ["catalog"] });
-      await qc.invalidateQueries({ queryKey: ["admin-products"] });
-      toast.success("Удалено");
-      navigate({ to: "/admin/products" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const volumeOptions = (VOLUMES as readonly string[]).includes(volume)
-    ? [...VOLUMES]
-    : [volume, ...VOLUMES];
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <div>
         <p className="text-sm text-muted">Фото</p>
         <div className="mt-2 grid grid-cols-3 gap-2">
@@ -154,7 +134,6 @@ export function ProductForm({ product }: { product?: Product | null }) {
               <input
                 type="file"
                 accept="image/*"
-                multiple
                 className="hidden"
                 onChange={(e) => {
                   void onFiles(e.target.files);
@@ -164,77 +143,54 @@ export function ProductForm({ product }: { product?: Product | null }) {
             </label>
           ) : null}
         </div>
-        <p className="mt-2 text-xs text-faint">Первое фото — на карточке. До 5 кадров.</p>
       </div>
 
       <Field label="Бренд">
-        <Input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Atelier Qazaq" />
+        <Input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="By Kilian" />
       </Field>
       <Field label="Название">
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Silk Steppe" />
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Angels' Share" />
       </Field>
-      <Field label="Объём">
-        <Select value={volume} onChange={(e) => setVolume(e.target.value)}>
-          {volumeOptions.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Цена, ₸">
-        <Input
-          inputMode="numeric"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          placeholder="24900"
-        />
-      </Field>
-      <Field label="Старая цена" hint="Необязательно">
-        <Input
-          inputMode="numeric"
-          value={oldPrice}
-          onChange={(e) => setOldPrice(e.target.value)}
-          placeholder="31900"
-        />
+      <Field label="Цена за 5 мл, ₸">
+        <Input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="21000" />
       </Field>
       <Field label="Описание">
-        <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="1–2 предложения про аромат"
-        />
+        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+      </Field>
+      <Field label="Пол">
+        <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
+          <option value="unisex">Унисекс</option>
+          <option value="female">Женский</option>
+          <option value="male">Мужской</option>
+        </Select>
+      </Field>
+      <Field label="Семейство">
+        <Input value={family} onChange={(e) => setFamily(e.target.value)} placeholder="Восточные гурманские" />
       </Field>
       <Field label="Верх">
-        <Input value={top} onChange={(e) => setTop(e.target.value)} placeholder="бергамот, груша" />
+        <Input value={top} onChange={(e) => setTop(e.target.value)} />
       </Field>
       <Field label="Сердце">
-        <Input value={heart} onChange={(e) => setHeart(e.target.value)} placeholder="пион, жасмин" />
+        <Input value={heart} onChange={(e) => setHeart(e.target.value)} />
       </Field>
       <Field label="База">
-        <Input value={base} onChange={(e) => setBase(e.target.value)} placeholder="мускус, сандал" />
+        <Input value={base} onChange={(e) => setBase(e.target.value)} />
       </Field>
       <label className="flex min-h-12 items-center justify-between gap-3 rounded-md bg-elevated px-4">
-        <span className="text-sm">В наличии / на витрине</span>
+        <span className="text-sm">В наличии</span>
         <input
           type="checkbox"
-          checked={listed}
-          onChange={(e) => setListed(e.target.checked)}
+          checked={onShelf}
+          onChange={(e) => setOnShelf(e.target.checked)}
           className="size-5 accent-accent"
         />
       </label>
-
-      <div className="flex flex-col gap-2">
-        <Button block disabled={busy} onClick={() => void onSave()}>
-          {busy ? "Сохраняю…" : "Сохранить"}
-        </Button>
-        {product ? (
-          <Button variant="danger" block disabled={busy} onClick={() => void onDelete()}>
-            <Trash2 className="mr-2 size-4" />
-            Удалить
-          </Button>
-        ) : null}
-      </div>
+      <Button block disabled={busy} onClick={() => void onSave()}>
+        {busy ? "Сохраняю…" : "Сохранить"}
+      </Button>
+      <Button variant="ghost" block disabled={busy} onClick={() => navigate({ to: "/admin/products" })}>
+        Отмена
+      </Button>
     </div>
   );
 }

@@ -29,18 +29,15 @@ function Storefront() {
   const active = countActiveFilters(filters);
 
   const query = useMemo(() => {
-    const min = filters.minPrice.trim() ? Number(filters.minPrice) : undefined;
-    const max = filters.maxPrice.trim() ? Number(filters.maxPrice) : undefined;
     return {
       q,
       brand: filters.brand === "all" ? undefined : filters.brand,
-      volume: filters.volume === "all" ? undefined : filters.volume,
-      minPrice: Number.isFinite(min) ? min : undefined,
-      maxPrice: Number.isFinite(max) ? max : undefined,
+      family: filters.family === "all" ? undefined : filters.family,
+      gender: filters.gender === "all" ? undefined : filters.gender,
     };
   }, [q, filters]);
 
-  const hasExtra = Boolean(query.q || query.brand || query.volume || query.minPrice || query.maxPrice);
+  const hasExtra = Boolean(query.q || query.brand || query.family || query.gender);
 
   const catalog = useQuery({
     queryKey: ["catalog", query],
@@ -58,6 +55,13 @@ function Storefront() {
   const store = storeQ.data ?? initial.store;
   const products = catalog.data ?? [];
   const empty = !catalog.isLoading && products.length === 0;
+  const families = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of initial.products) {
+      if (p.attributes.family?.trim()) set.add(p.attributes.family.trim());
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, "ru"));
+  }, [initial.products]);
   const brands = useMemo(() => {
     const set = new Set<string>();
     for (const p of initial.products) {
@@ -74,7 +78,7 @@ function Storefront() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Название или бренд"
+            placeholder="Название"
             className="min-h-12 w-full rounded-md border border-border bg-elevated py-3 pl-10 pr-4 text-sm text-fg outline-none placeholder:text-faint focus:border-accent"
           />
         </div>
@@ -146,6 +150,7 @@ function Storefront() {
         open={sheetOpen}
         value={filters}
         brands={brands}
+        families={families}
         onClose={() => setSheetOpen(false)}
         onApply={setFilters}
       />

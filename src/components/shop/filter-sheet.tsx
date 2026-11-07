@@ -3,44 +3,43 @@ import { cn } from "@/lib/utils";
 
 export type CatalogFilters = {
   brand: string;
-  volume: "all" | "30" | "50" | "100";
-  minPrice: string;
-  maxPrice: string;
+  family: string;
+  gender: "all" | "unisex" | "female" | "male";
 };
 
 export const EMPTY_FILTERS: CatalogFilters = {
   brand: "all",
-  volume: "all",
-  minPrice: "",
-  maxPrice: "",
+  family: "all",
+  gender: "all",
 };
 
 export function countActiveFilters(f: CatalogFilters): number {
   let n = 0;
   if (f.brand !== "all") n += 1;
-  if (f.volume !== "all") n += 1;
-  if (f.minPrice.trim()) n += 1;
-  if (f.maxPrice.trim()) n += 1;
+  if (f.family !== "all") n += 1;
+  if (f.gender !== "all") n += 1;
   return n;
 }
 
-const VOLUME: Array<{ id: CatalogFilters["volume"]; label: string }> = [
+const GENDER: Array<{ id: CatalogFilters["gender"]; label: string }> = [
   { id: "all", label: "Все" },
-  { id: "30", label: "30 мл" },
-  { id: "50", label: "50 мл" },
-  { id: "100", label: "100 мл" },
+  { id: "unisex", label: "Унисекс" },
+  { id: "female", label: "Женский" },
+  { id: "male", label: "Мужской" },
 ];
 
 export function FilterSheet({
   open,
   value,
   brands,
+  families,
   onClose,
   onApply,
 }: {
   open: boolean;
   value: CatalogFilters;
   brands: string[];
+  families: string[];
   onClose: () => void;
   onApply: (next: CatalogFilters) => void;
 }) {
@@ -133,41 +132,37 @@ export function FilterSheet({
             </div>
           </Section>
 
-          <Section title="Объём">
+          <Section title="Семейство">
             <div className="flex flex-wrap gap-2">
-              {VOLUME.map((v) => (
+              <Chip
+                active={draft.family === "all"}
+                onClick={() => setDraft({ ...draft, family: "all" })}
+              >
+                Все
+              </Chip>
+              {families.map((f) => (
                 <Chip
-                  key={v.id}
-                  active={draft.volume === v.id}
-                  onClick={() => setDraft({ ...draft, volume: v.id })}
+                  key={f}
+                  active={draft.family === f}
+                  onClick={() => setDraft({ ...draft, family: f })}
                 >
-                  {v.label}
+                  {f}
                 </Chip>
               ))}
             </div>
           </Section>
 
-          <Section title="Цена">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-              <input
-                inputMode="numeric"
-                placeholder="от"
-                value={draft.minPrice}
-                onChange={(e) =>
-                  setDraft({ ...draft, minPrice: e.target.value.replace(/[^\d]/g, "") })
-                }
-                className="min-h-12 rounded-md border border-border bg-elevated px-3 text-sm text-fg outline-none placeholder:text-faint focus:border-accent"
-              />
-              <span className="text-faint">—</span>
-              <input
-                inputMode="numeric"
-                placeholder="до"
-                value={draft.maxPrice}
-                onChange={(e) =>
-                  setDraft({ ...draft, maxPrice: e.target.value.replace(/[^\d]/g, "") })
-                }
-                className="min-h-12 rounded-md border border-border bg-elevated px-3 text-sm text-fg outline-none placeholder:text-faint focus:border-accent"
-              />
+          <Section title="Пол">
+            <div className="flex flex-wrap gap-2">
+              {GENDER.map((g) => (
+                <Chip
+                  key={g.id}
+                  active={draft.gender === g.id}
+                  onClick={() => setDraft({ ...draft, gender: g.id })}
+                >
+                  {g.label}
+                </Chip>
+              ))}
             </div>
           </Section>
         </div>

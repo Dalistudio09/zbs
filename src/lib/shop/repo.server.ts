@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getSql } from "@/lib/db";
 import { getPaymentsProvider, markMockPaid } from "@/lib/payments";
 import { deliveryFee, kaspiPhone, normalizeKzPhone, truncate } from "./format";
+import { clampMl, priceForMl } from "./volume";
 import { storeImageUrl } from "./cloudinary.server";
 import { getStoreRow } from "./bootstrap.server";
 import {
@@ -61,6 +62,7 @@ export async function listPublicProducts(filters: {
   q?: string;
   brand?: string;
   gender?: string;
+  family?: string;
   volume?: string;
   inStock?: boolean;
   minPrice?: number;
@@ -81,9 +83,7 @@ export async function listPublicProducts(filters: {
   if (q) {
     products = products.filter(
       (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.brand ?? "").toLowerCase().includes(q) ||
-        (p.sku ?? "").toLowerCase().includes(q),
+        p.name.toLowerCase().includes(q),
     );
   }
   if (filters.brand && filters.brand !== "all") {
@@ -92,6 +92,10 @@ export async function listPublicProducts(filters: {
   }
   if (filters.gender && filters.gender !== "all") {
     products = products.filter((p) => p.attributes.gender === filters.gender);
+  }
+  if (filters.family && filters.family !== "all") {
+    const want = filters.family.trim().toLowerCase();
+    products = products.filter((p) => (p.attributes.family ?? "").toLowerCase() === want);
   }
   if (filters.volume && filters.volume !== "all") {
     const want = Number(filters.volume);
@@ -352,7 +356,7 @@ export type CheckoutInput = {
   address?: string;
   comment?: string;
   paymentMethod: PaymentMethod;
-  items: Array<{ productId: string; qty: number }>;
+  items: Array<{ productId: string; qty: number; volumeMl?: number }>;
   buyerTelegramId?: string;
 };
 
@@ -380,6 +384,8 @@ export async function createOrder(input: CheckoutInput): Promise<Result<Order>> 
   const lines: Array<{
     product: Product;
     qty: number;
+    volumeMl: number;
+    unitPrice: number;
   }> = [];
   for (const item of input.items) {
     const qty = Math.max(1, Math.round(item.qty));
@@ -390,10 +396,24 @@ export async function createOrder(input: CheckoutInput): Promise<Result<Order>> 
     if (Number(row.price_kzt) <= 0) {
       return { ok: false, error: "Некорректная цена товара" };
     }
-    lines.push({ product: toProduct(row, imgs.get(row.id) ?? []), qty });
+    const product = toProduct(row, imgs.get(row.id) ?? []);
+    const stock = Number(product.attributes.stock ?? 0);
+    if (stock <= 0) {
+      return { ok: false, error: `${product.name} закончился` };
+    }
+    const volumeMl = clampMl(item.volumeMl ?? 5, stock);
+    if (volumeMl / 5 > stock) {
+      return { ok: false, error: `Для ${product.name} не хватает объёма` };
+    }
+    lines.push({
+      product,
+      qty,
+      volumeMl,
+      unitPrice: priceForMl(product.priceKzt, volumeMl),
+    });
   }
 
-  const subtotal = lines.reduce((s, l) => s + l.product.priceKzt * l.qty, 0);
+  const subtotal = lines.reduce((s, l) => s + l.unitPrice * l.qty, 0);
   const delivery = deliveryFee(city, input.fulfillment, {
     almaty: Number(store.delivery_almaty_kzt),
     astana: Number(store.delivery_astana_kzt),
@@ -431,8 +451,8 @@ export async function createOrder(input: CheckoutInput): Promise<Result<Order>> 
         price_kzt, qty, image_url
       ) values (
         ${randomUUID()}, ${orderId}, ${line.product.id}, ${line.product.name},
-        ${line.product.brand}, ${line.product.attributes.volume ?? null},
-        ${line.product.priceKzt}, ${line.qty}, ${line.product.coverUrl}
+        ${line.product.brand}, ${`${line.volumeMl} мл`},
+        ${line.unitPrice}, ${line.qty}, ${line.product.coverUrl}
       )
     `;
   }

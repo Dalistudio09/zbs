@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { fetchProduct, fetchStore, submitRestock } from "@/fn/public";
 import { useCart } from "@/lib/shop/cart";
-import { AVAIL_LABEL, formatKzt, maskPhoneInput } from "@/lib/shop/format";
+import { AVAIL_LABEL, formatKzt, GENDER_LABEL, maskPhoneInput } from "@/lib/shop/format";
+import { priceForMl } from "@/lib/shop/volume";
+import { VolumePicker } from "@/components/shop/volume-picker";
 
 export const Route = createFileRoute("/p/$id")({
   loader: async ({ params }) => {
@@ -26,6 +28,7 @@ function ProductPage() {
   const initial = Route.useLoaderData();
   const navigate = useNavigate();
   const add = useCart((s) => s.add);
+  const [ml, setMl] = useState(5);
   const [phone, setPhone] = useState("");
   const [restockBusy, setRestockBusy] = useState(false);
 
@@ -49,14 +52,15 @@ function ProductPage() {
   }
 
   const item = product;
+  const stock = Number(item.attributes.stock ?? 0);
   const notes = item.attributes.notes;
-  const canBuy = item.availability === "in_stock";
-  const discount = Boolean(item.oldPriceKzt && item.oldPriceKzt > item.priceKzt);
+  const canBuy = item.availability === "in_stock" && stock > 0;
+  const unit = priceForMl(item.priceKzt, ml);
 
   function addToCart() {
-    add(item.id);
+    add(item.id, ml);
     toast.success("В корзине", {
-      description: item.name,
+      description: `${item.name}, ${ml} мл`,
       action: {
         label: "Открыть",
         onClick: () => navigate({ to: "/cart" }),
@@ -115,18 +119,22 @@ function ProductPage() {
       ) : null}
       <h1 className="mt-1 font-display text-4xl text-fg">{product.name}</h1>
       <p className="mt-2 text-sm text-muted">
-        {[product.attributes.volume, AVAIL_LABEL[product.availability]].filter(Boolean).join(" · ")}
+        {[
+          product.attributes.family,
+          product.attributes.gender ? GENDER_LABEL[product.attributes.gender] : "",
+          `остаток ${stock} шт`,
+          AVAIL_LABEL[product.availability],
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       </p>
 
+      <div className="mt-5">
+        <VolumePicker value={ml} stock={stock} onChange={setMl} />
+      </div>
       <p className="mt-4 flex items-baseline gap-3">
-        <span className="font-display text-4xl tabular-nums text-accent">
-          {formatKzt(product.priceKzt)}
-        </span>
-        {discount && product.oldPriceKzt ? (
-          <span className="text-lg text-faint line-through tabular-nums">
-            {formatKzt(product.oldPriceKzt)}
-          </span>
-        ) : null}
+        <span className="font-display text-4xl tabular-nums text-accent">{formatKzt(unit)}</span>
+        <span className="text-sm text-faint">за 5 мл {formatKzt(product.priceKzt)}</span>
       </p>
 
       {product.description ? (

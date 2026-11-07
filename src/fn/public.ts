@@ -18,6 +18,7 @@ export type CatalogQuery = {
   q?: string;
   brand?: string;
   gender?: string;
+  family?: string;
   volume?: string;
   inStock?: boolean;
   minPrice?: number;
@@ -35,6 +36,7 @@ export const fetchCatalog = createServerFn({ method: "GET" })
       q: data.q,
       brand: data.brand,
       gender: data.gender,
+      family: data.family,
       volume: data.volume,
       inStock: data.inStock,
       minPrice: data.minPrice,

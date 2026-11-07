@@ -28,7 +28,7 @@ export const CATALOG_FIELDS: CatalogField[] = [
 ];
 
 export function cardMeta(product: {
-  attributes: { volume?: string; gender?: string };
+  attributes: { family?: string; volume?: string };
 }): string {
-  return product.attributes.volume ?? "";
+  return product.attributes.family ?? product.attributes.volume ?? "";
 }

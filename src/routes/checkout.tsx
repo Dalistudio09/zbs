@@ -8,6 +8,7 @@ import { Field, Input, Textarea } from "@/components/ui/field";
 import { fetchCatalog, fetchStore, submitOrder } from "@/fn/public";
 import { useCart } from "@/lib/shop/cart";
 import { formatKzt, maskPhoneInput, whatsappHref } from "@/lib/shop/format";
+import { priceForMl } from "@/lib/shop/volume";
 import { buyerTelegramId } from "@/lib/shop/telegram-web";
 import { BRAND_NAME } from "@/lib/shop/brand";
 
@@ -34,7 +35,7 @@ function CheckoutPage() {
   const lines = items
     .map((i) => {
       const p = byId.get(i.productId);
-      return p ? { product: p, qty: i.qty } : null;
+      return p ? { product: p, volumeMl: i.volumeMl || 5 } : null;
     })
     .filter((x): x is NonNullable<typeof x> => Boolean(x));
 
@@ -43,7 +44,7 @@ function CheckoutPage() {
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const total = lines.reduce((s, l) => s + l.product.priceKzt * l.qty, 0);
+  const total = lines.reduce((s, l) => s + priceForMl(l.product.priceKzt, l.volumeMl), 0);
 
   async function submit() {
     if (!lines.length) {
@@ -64,7 +65,7 @@ function CheckoutPage() {
           fulfillment: "pickup",
           comment,
           paymentMethod: "cod",
-          items: lines.map((l) => ({ productId: l.product.id, qty: l.qty })),
+          items: lines.map((l) => ({ productId: l.product.id, qty: 1, volumeMl: l.volumeMl })),
           buyerTelegramId: buyerTelegramId(),
         },
       });
@@ -111,13 +112,12 @@ function CheckoutPage() {
       <h1 className="mb-6 font-display text-4xl">Заявка</h1>
       <div className="flex flex-col gap-5">
         <ul className="flex flex-col gap-2 text-sm">
-          {lines.map(({ product, qty }) => (
+          {lines.map(({ product, volumeMl }) => (
             <li key={product.id} className="flex justify-between gap-3">
               <span>
-                {product.name}
-                {product.attributes.volume ? `, ${product.attributes.volume}` : ""} × {qty}
+                {product.name}, {volumeMl} мл
               </span>
-              <span className="tabular-nums">{formatKzt(product.priceKzt * qty)}</span>
+              <span className="tabular-nums">{formatKzt(priceForMl(product.priceKzt, volumeMl))}</span>
             </li>
           ))}
         </ul>

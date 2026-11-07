@@ -26,6 +26,10 @@ export type ProductNotes = {
 
 export type ProductAttributes = {
   gender?: Gender;
+  family?: string;
+  stock?: number;
+  year?: string;
+  perfumer?: string;
   volume?: string;
   notes?: ProductNotes;
 };

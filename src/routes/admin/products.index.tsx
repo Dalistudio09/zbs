@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { adminProducts, adminToggleVisible } from "@/fn/admin";
-import { AVAIL_LABEL, formatKzt } from "@/lib/shop/format";
+import { formatKzt } from "@/lib/shop/format";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/admin/products/")({
@@ -50,7 +50,7 @@ function ProductsPage() {
                 <div className="min-w-0">
                   <p className="truncate font-medium">{p.name}</p>
                   <p className="text-xs text-muted">
-                    {formatKzt(p.priceKzt)} · {AVAIL_LABEL[p.availability]}
+                    {formatKzt(p.priceKzt)} / 5 мл
                   </p>
                 </div>
               </Link>
