@@ -1,17 +1,17 @@
 # ZBS parfbar
 
-Корень архива — корень проекта. Точка входа роутера: `src/router.tsx`.
+Корень архива — корень проекта. Роутер: `src/router.tsx`.
 
 ```bash
 npm install
 npm run build
 ```
 
-На Vercel задайте переменные окружения (в архиве их нет):
+Переменные на Vercel:
 
-- `DATABASE_URL` — строка Neon
+- `DATABASE_URL` — Neon
 - `CLOUDINARY_CLOUD_NAME`
 - `CLOUDINARY_API_KEY`
 - `CLOUDINARY_API_SECRET`
 
-Товары и заказы пишутся только в Neon. Фото уходят в Cloudinary, папка `zbs`; в базе хранится ссылка.
+91 аромат из каталога попадает в Neon при первом запуске. Цена в базе — за 5 мл. Новые фото из админки уходят в Cloudinary, папка `zbs`.
