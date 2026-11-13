@@ -58,11 +58,16 @@ export async function getAdminStore(): Promise<AdminStore> {
   return toAdminStore(await getStoreRow());
 }
 
+function asFilterList(value?: string | string[]): string[] {
+  const list = Array.isArray(value) ? value : value ? [value] : [];
+  return list.map((item) => item.trim().toLowerCase()).filter((item) => item && item !== "all");
+}
+
 export async function listPublicProducts(filters: {
   q?: string;
-  brand?: string;
-  gender?: string;
-  family?: string;
+  brand?: string | string[];
+  gender?: string | string[];
+  family?: string | string[];
   volume?: string;
   inStock?: boolean;
   minPrice?: number;
@@ -86,16 +91,19 @@ export async function listPublicProducts(filters: {
         p.name.toLowerCase().includes(q),
     );
   }
-  if (filters.brand && filters.brand !== "all") {
-    const want = filters.brand.trim().toLowerCase();
-    products = products.filter((p) => (p.brand ?? "").toLowerCase() === want);
+  const brands = asFilterList(filters.brand);
+  if (brands.length) {
+    products = products.filter((p) => brands.includes((p.brand ?? "").toLowerCase()));
   }
-  if (filters.gender && filters.gender !== "all") {
-    products = products.filter((p) => p.attributes.gender === filters.gender);
+  const genders = asFilterList(filters.gender);
+  if (genders.length) {
+    products = products.filter((p) => genders.includes(p.attributes.gender ?? ""));
   }
-  if (filters.family && filters.family !== "all") {
-    const want = filters.family.trim().toLowerCase();
-    products = products.filter((p) => (p.attributes.family ?? "").toLowerCase() === want);
+  const families = asFilterList(filters.family);
+  if (families.length) {
+    products = products.filter((p) =>
+      families.includes((p.attributes.family ?? "").trim().toLowerCase()),
+    );
   }
   if (filters.volume && filters.volume !== "all") {
     const want = Number(filters.volume);
