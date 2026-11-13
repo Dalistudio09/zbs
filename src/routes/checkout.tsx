@@ -7,10 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { fetchCatalog, fetchStore, submitOrder } from "@/fn/public";
 import { useCart } from "@/lib/shop/cart";
-import { formatKzt, maskPhoneInput, whatsappHref } from "@/lib/shop/format";
+import { formatKzt, maskPhoneInput } from "@/lib/shop/format";
 import { priceForMl } from "@/lib/shop/volume";
 import { buyerTelegramId } from "@/lib/shop/telegram-web";
-import { BRAND_NAME } from "@/lib/shop/brand";
 
 export const Route = createFileRoute("/checkout")({
   loader: async () => {
@@ -73,23 +72,9 @@ function CheckoutPage() {
         toast.error(result.error);
         return;
       }
-      const order = result.data;
-      const text = [
-        BRAND_NAME,
-        `Заказ №${order.orderNumber}`,
-        ...order.items.map(
-          (i) => `${i.name}${i.volume ? `, ${i.volume}` : ""} × ${i.qty} — ${formatKzt(i.priceKzt * i.qty)}`,
-        ),
-        `Итого: ${formatKzt(order.totalKzt)}`,
-        `Имя: ${order.customerName}`,
-        `Телефон: ${phone}`,
-        comment.trim() ? `Комментарий: ${comment.trim()}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
       clear();
-      window.open(whatsappHref(store.sellerPhone, text), "_blank", "noopener,noreferrer");
-      navigate({ to: "/order/$orderId", params: { orderId: order.id } });
+      toast.success("Заявка отправлена");
+      navigate({ to: "/order/$orderId", params: { orderId: result.data.id } });
     } finally {
       setBusy(false);
     }
@@ -99,7 +84,7 @@ function CheckoutPage() {
     return (
       <StoreShell store={store}>
         <h1 className="font-display text-4xl">Сейчас заказы не принимаем</h1>
-        <p className="mt-3 text-muted">Напишите в WhatsApp — подскажем, когда откроемся.</p>
+        <p className="mt-3 text-muted">Загляните чуть позже.</p>
         <Button className="mt-6" onClick={() => navigate({ to: "/" })}>
           На витрину
         </Button>
@@ -146,7 +131,7 @@ function CheckoutPage() {
           <span className="tabular-nums">{formatKzt(total)}</span>
         </div>
         <Button block disabled={busy || !lines.length} onClick={() => void submit()}>
-          {busy ? "Отправляем…" : "Отправить в WhatsApp"}
+          {busy ? "Отправляем…" : "Отправить заявку"}
         </Button>
       </div>
     </StoreShell>

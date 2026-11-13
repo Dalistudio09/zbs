@@ -1,10 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { StoreShell } from "@/components/shop/store-shell";
-import { Button } from "@/components/ui/button";
 import { fetchOrder, fetchStore } from "@/fn/public";
-import { formatKzt, formatPhonePretty, ORDER_STATUS_LABEL, whatsappHref } from "@/lib/shop/format";
-import { BRAND_NAME } from "@/lib/shop/brand";
+import { formatKzt, formatPhonePretty, ORDER_STATUS_LABEL } from "@/lib/shop/format";
 
 export const Route = createFileRoute("/order/$orderId")({
   loader: async ({ params }) => {
@@ -37,12 +35,7 @@ function OrderPage() {
     );
   }
 
-  const seller = store.sellerPhone;
   const paid = order.status !== "pending_payment" && order.status !== "cancelled";
-  const wa = whatsappHref(
-    seller,
-    `${BRAND_NAME}\nЗаказ №${order.orderNumber}\n${order.customerName}`,
-  );
 
   return (
     <StoreShell store={store}>
@@ -93,12 +86,6 @@ function OrderPage() {
             : `Доставка, ${order.city}${order.address ? `, ${order.address}` : ""}`}
         </p>
       </div>
-
-      <a href={wa} target="_blank" rel="noreferrer" className="mt-8 block no-underline">
-        <Button block variant="ghost">
-          Написать в WhatsApp
-        </Button>
-      </a>
     </StoreShell>
   );
 }

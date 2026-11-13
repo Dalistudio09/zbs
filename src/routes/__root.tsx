@@ -16,7 +16,7 @@ export const Route = createRootRoute({
       { name: "theme-color", content: "#0E0E0E" },
       {
         name: "description",
-        content: `${BRAND_NAME}. Селективная парфюмерия. Заявка в WhatsApp.`,
+        content: `${BRAND_NAME}. Селективная парфюмерия.`,
       },
     ],
     links: [
