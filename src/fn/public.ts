@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { getPaymentsProvider } from "@/lib/payments";
 import { getStoreRow } from "@/lib/shop/bootstrap.server";
 import {
@@ -12,13 +13,14 @@ import {
   requestRestock,
 } from "@/lib/shop/repo.server";
 import { notifyNewOrder, notifyPayment, notifyRestock } from "@/lib/shop/notify.server";
+import { ensureTelegramWebhook, requestOrigin } from "@/lib/shop/telegram.server";
 import type { CheckoutInput } from "@/lib/shop/repo.server";
 
 export type CatalogQuery = {
   q?: string;
-  brand?: string;
-  gender?: string;
-  family?: string;
+  brand?: string | string[];
+  gender?: string | string[];
+  family?: string | string[];
   volume?: string;
   inStock?: boolean;
   minPrice?: number;
@@ -26,6 +28,11 @@ export type CatalogQuery = {
 };
 
 export const fetchStore = createServerFn({ method: "GET" }).handler(async () => {
+  try {
+    void ensureTelegramWebhook(requestOrigin(getRequest()));
+  } catch {
+    /* preview has no public https host */
+  }
   return getPublicStore();
 });
 

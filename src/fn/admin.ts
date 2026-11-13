@@ -16,23 +16,23 @@ import {
   updateStoreSettings,
   type SaveProductInput,
 } from "@/lib/shop/repo.server";
-import { getAdmin, loginAdminByPassword, loginAdminByTelegram, logoutAdmin, requireAdmin } from "@/lib/shop/session.server";
+import { getAdmin, loginAdminByTelegram, logoutAdmin, requireAdmin } from "@/lib/shop/session.server";
+import { getStoreRow } from "@/lib/shop/bootstrap.server";
 import { notifyPayment, notifyStatus } from "@/lib/shop/notify.server";
-import { handleLocalBotMessage } from "@/lib/shop/telegram.server";
+import { handleLocalBotMessage, resolveBotToken, telegramUserFromInitData, isShopAdmin } from "@/lib/shop/telegram.server";
 import type { OrderStatus } from "@/lib/shop/types";
 
 export const adminLogin = createServerFn({ method: "POST" })
-  .validator((d: { password?: string; telegramId?: string }) => d)
+  .validator((d: { initData?: string }) => d)
   .handler(async ({ data }) => {
-    if (data.telegramId?.trim()) {
-      const user = await loginAdminByTelegram(data.telegramId);
-      if (user) return { ok: true as const, login: user.login };
-    }
-    if (data.password) {
-      const user = await loginAdminByPassword(data.password);
-      if (user) return { ok: true as const, login: user.login };
-    }
-    return { ok: false as const, error: "Неверный пароль или Telegram ID" };
+    const initData = data.initData?.trim();
+    if (!initData) return { ok: false as const, error: "Нет доступа" };
+    const store = await getStoreRow();
+    const user = telegramUserFromInitData(initData, resolveBotToken(store.telegram_bot_token));
+    if (!user || !isShopAdmin(user.id)) return { ok: false as const, error: "Нет доступа" };
+    const session = await loginAdminByTelegram(String(user.id));
+    if (!session) return { ok: false as const, error: "Нет доступа" };
+    return { ok: true as const, login: session.login };
   });
 
 export const adminLogout = createServerFn({ method: "POST" }).handler(async () => {
