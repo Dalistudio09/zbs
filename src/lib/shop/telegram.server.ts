@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { env } from "@/lib/env.server";
 import { getSql } from "@/lib/db";
 import { getStoreRow } from "./bootstrap.server";
 import { saveProduct } from "./repo.server";
@@ -35,6 +37,104 @@ type Draft = {
 
 type BotSession = { chat_id: string; step: string; draft: Draft | string };
 
+export const ADMIN_TELEGRAM_IDS = ["458817513", "743736933"] as const;
+const START_TEXT = "ZBS parfbar — роспив премиальных духов";
+const WELCOME_CAPTION = "Добро пожаловать в магазин премиальных духов!";
+const hookedOrigins = new Set<string>();
+
+export function resolveBotToken(storeToken?: string | null): string | null {
+  return env("BOT_TOKEN") || storeToken?.trim() || null;
+}
+
+export function isShopAdmin(userId: string | number | null | undefined): boolean {
+  if (userId == null || userId === "") return false;
+  return (ADMIN_TELEGRAM_IDS as readonly string[]).includes(String(userId));
+}
+
+export function requestOrigin(request: Request): string {
+  const host = (request.headers.get("x-forwarded-host") || request.headers.get("host") || "")
+    .split(",")[0]
+    .trim();
+  const proto = (request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", ""))
+    .split(",")[0]
+    .trim();
+  if (host) return `${proto}://${host}`;
+  return new URL(request.url).origin;
+}
+
+export function publicMiniAppUrl(fallback?: string | null): string | null {
+  const explicit = env("MINI_APP_URL") || env("APP_URL");
+  if (explicit?.startsWith("https://")) return explicit.replace(/\/$/, "");
+  if (fallback?.startsWith("https://")) return fallback.replace(/\/$/, "");
+  const prod = env("VERCEL_PROJECT_PRODUCTION_URL");
+  if (prod) return `https://${prod.replace(/^https?:\/\//, "").replace(/\/$/, "")}`;
+  const vercel = env("VERCEL_URL");
+  if (vercel) return `https://${vercel.replace(/^https?:\/\//, "").replace(/\/$/, "")}`;
+  return null;
+}
+
+/** Register this deployment as the bot webhook once per process. No-op without BOT_TOKEN or https. */
+export async function ensureTelegramWebhook(origin: string | null | undefined): Promise<void> {
+  if (!origin?.startsWith("https://")) return;
+  const base = origin.replace(/\/$/, "");
+  if (hookedOrigins.has(base)) return;
+  const store = await getStoreRow();
+  const token = resolveBotToken(store.telegram_bot_token);
+  if (!token) return;
+  hookedOrigins.add(base);
+  const secret = env("TELEGRAM_WEBHOOK_SECRET");
+  const body: Record<string, unknown> = {
+    url: `${base}/api/telegram/webhook`,
+    allowed_updates: ["message", "callback_query"],
+  };
+  if (secret) body.secret_token = secret;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      hookedOrigins.delete(base);
+      const text = await res.text().catch(() => "");
+      console.error("[telegram] setWebhook", res.status, text.slice(0, 200));
+    }
+  } catch (err) {
+    hookedOrigins.delete(base);
+    console.error("[telegram] setWebhook", err);
+  }
+}
+
+export function telegramUserFromInitData(
+  initData: string,
+  token: string | null,
+): { id: number } | null {
+  if (!token || !initData.trim()) return null;
+  const params = new URLSearchParams(initData);
+  const hash = params.get("hash");
+  if (!hash) return null;
+  const pairs: string[] = [];
+  for (const [key, value] of params.entries()) {
+    if (key === "hash") continue;
+    pairs.push(`${key}=${value}`);
+  }
+  pairs.sort();
+  const secret = createHmac("sha256", "WebAppData").update(token).digest();
+  const expected = createHmac("sha256", secret).update(pairs.join("\n")).digest("hex");
+  const a = Buffer.from(expected);
+  const b = Buffer.from(hash);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  const authDate = Number(params.get("auth_date") || 0);
+  if (!authDate || Date.now() / 1000 - authDate > 24 * 60 * 60) return null;
+  try {
+    const user = JSON.parse(params.get("user") || "") as { id?: number };
+    if (!user.id) return null;
+    return { id: user.id };
+  } catch {
+    return null;
+  }
+}
+
 async function send(token: string, chatId: string | number, text: string, extra?: Record<string, unknown>) {
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
@@ -63,13 +163,74 @@ function parseDraft(raw: Draft | string | null | undefined): Draft {
   return raw;
 }
 
-function isAdmin(ids: string | null, userId: number): boolean {
-  if (!ids || !ids.trim()) return true;
-  return ids
-    .split(/[,;\s]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .includes(String(userId));
+function isAdmin(userId: number | undefined): boolean {
+  return isShopAdmin(userId);
+}
+
+async function sendShop(token: string, chatId: string | number, shopUrl: string | null) {
+  const extra: Record<string, unknown> = {};
+  if (shopUrl?.startsWith("https://")) {
+    extra.reply_markup = {
+      inline_keyboard: [[{ text: "Открыть магазин", web_app: { url: shopUrl } }]],
+    };
+  }
+  await send(token, chatId, START_TEXT, extra);
+}
+
+function welcomeMarkup(shopUrl: string | null) {
+  if (!shopUrl?.startsWith("https://")) return undefined;
+  return {
+    inline_keyboard: [[{ text: "Выбрать аромат", web_app: { url: shopUrl } }]],
+  };
+}
+
+async function readWelcomePhoto(): Promise<Buffer | null> {
+  const candidates = [
+    new URL("../../../public/welcome.jpg", import.meta.url),
+    new URL("../../../../public/welcome.jpg", import.meta.url),
+  ];
+  for (const url of candidates) {
+    try {
+      return await readFile(url);
+    } catch {
+      /* next */
+    }
+  }
+  try {
+    return await readFile("public/welcome.jpg");
+  } catch {
+    return null;
+  }
+}
+
+async function sendWelcome(token: string, chatId: string, shopUrl: string | null) {
+  const markup = welcomeMarkup(shopUrl);
+  const payload: Record<string, unknown> = {
+    chat_id: chatId,
+    caption: WELCOME_CAPTION,
+  };
+  if (markup) payload.reply_markup = markup;
+
+  if (shopUrl?.startsWith("https://")) {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, photo: `${shopUrl}/welcome.jpg` }),
+    });
+    const data = (await res.json().catch(() => null)) as { ok?: boolean } | null;
+    if (data?.ok) return;
+  }
+  const bytes = await readWelcomePhoto();
+  if (!bytes) return;
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  form.append("caption", WELCOME_CAPTION);
+  form.append("photo", new Blob([new Uint8Array(bytes)], { type: "image/jpeg" }), "welcome.jpg");
+  if (markup) form.append("reply_markup", JSON.stringify(markup));
+  await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+    method: "POST",
+    body: form,
+  });
 }
 
 async function downloadPhoto(token: string, fileId: string): Promise<string | null> {
@@ -84,12 +245,17 @@ async function downloadPhoto(token: string, fileId: string): Promise<string | nu
   return `data:image/jpeg;base64,${buf.toString("base64")}`;
 }
 
-export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
+export async function handleTelegramUpdate(update: TgUpdate, miniAppUrl?: string | null): Promise<void> {
   const store = await getStoreRow();
-  const token = store.telegram_bot_token;
+  const token = resolveBotToken(store.telegram_bot_token);
   if (!token) return;
+  const shopUrl = publicMiniAppUrl(miniAppUrl);
 
   if (update.callback_query?.data?.startsWith("st:")) {
+    if (!isAdmin(update.callback_query.from?.id)) {
+      await answerCallback(token, update.callback_query.id, "Нет доступа");
+      return;
+    }
     const [, orderId, status] = update.callback_query.data.split(":");
     if (orderId && status) {
       const { setOrderStatus } = await import("./repo.server");
@@ -104,9 +270,13 @@ export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
   const msg = update.message;
   if (!msg) return;
   const chatId = String(msg.chat.id);
-  const fromId = msg.from?.id;
-  if (fromId && !isAdmin(store.admin_telegram_ids, fromId)) {
-    await send(token, chatId, "Этот бот только для продавца.");
+  const text = (msg.text || msg.caption || "").trim();
+  if (text === "/start" || text.startsWith("/start ")) {
+    await sendWelcome(token, chatId, shopUrl);
+    return;
+  }
+  if (!isAdmin(msg.from?.id)) {
+    await sendShop(token, chatId, shopUrl);
     return;
   }
 
@@ -126,23 +296,12 @@ export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
     draft = nextDraft;
   }
 
-  const text = (msg.text || msg.caption || "").trim();
   const startAdd =
-    text === "/start" ||
     /^добавить/i.test(text) ||
     text === "/add" ||
     text === "Добавить товар";
 
-  if (startAdd && (step === "idle" || text === "/start" || text === "/add" || text === "Добавить товар")) {
-    if (text === "/start") {
-      await send(token, chatId, "ZBS parfbar. Чтобы добавить аромат — пришлите фото или нажмите кнопку.", {
-        reply_markup: {
-          keyboard: [[{ text: "Добавить товар" }]],
-          resize_keyboard: true,
-        },
-      });
-      if (text === "/start") return;
-    }
+  if (startAdd && (step === "idle" || text === "/add" || text === "Добавить товар")) {
     await persist("photo", {});
     await send(token, chatId, "Пришлите фото флакона.");
     return;

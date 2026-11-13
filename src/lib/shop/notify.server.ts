@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getSql } from "@/lib/db";
 import { formatKzt, formatPhonePretty, ORDER_STATUS_LABEL } from "./format";
 import { getStoreRow } from "./bootstrap.server";
+import { resolveBotToken } from "./telegram.server";
 import type { Order, OrderStatus } from "./types";
 
 async function telegramSend(
@@ -73,18 +74,19 @@ export async function notifyNewOrder(order: Order) {
     values (${randomUUID()}, ${store.id}, ${"order"}, ${title}, ${body}, ${order.id})
   `;
 
-  if (store.telegram_bot_token && store.seller_telegram_chat_id) {
+  const token = resolveBotToken(store.telegram_bot_token);
+  if (token && store.seller_telegram_chat_id) {
     await telegramSend(
-      store.telegram_bot_token,
+      token,
       store.seller_telegram_chat_id,
       `<b>${title}</b>\n${body}`,
       { reply_markup: sellerKeyboard(order.id) },
     );
   }
 
-  if (store.telegram_bot_token && order.buyerTelegramId) {
+  if (token && order.buyerTelegramId) {
     await telegramSend(
-      store.telegram_bot_token,
+      token,
       order.buyerTelegramId,
       `Заказ №${order.orderNumber} принят.\n${orderLines(order)}\nИтого ${formatKzt(order.totalKzt)}\nСтатус: ${ORDER_STATUS_LABEL[order.status]}`,
     );
@@ -100,12 +102,13 @@ export async function notifyPayment(order: Order) {
     insert into notification_log (id, store_id, kind, title, body, order_id)
     values (${randomUUID()}, ${store.id}, ${"payment"}, ${title}, ${body}, ${order.id})
   `;
-  if (store.telegram_bot_token && store.seller_telegram_chat_id) {
-    await telegramSend(store.telegram_bot_token, store.seller_telegram_chat_id, `<b>${title}</b>\n${body}`);
+  const token = resolveBotToken(store.telegram_bot_token);
+  if (token && store.seller_telegram_chat_id) {
+    await telegramSend(token, store.seller_telegram_chat_id, `<b>${title}</b>\n${body}`);
   }
-  if (store.telegram_bot_token && order.buyerTelegramId) {
+  if (token && order.buyerTelegramId) {
     await telegramSend(
-      store.telegram_bot_token,
+      token,
       order.buyerTelegramId,
       `Оплата прошла. Заказ №${order.orderNumber} — ${formatKzt(order.totalKzt)}.`,
     );
@@ -114,7 +117,8 @@ export async function notifyPayment(order: Order) {
 
 export async function notifyStatus(order: Order, status: OrderStatus) {
   const store = await getStoreRow();
-  if (!store.telegram_bot_token || !order.buyerTelegramId) return;
+  const token = resolveBotToken(store.telegram_bot_token);
+  if (!token || !order.buyerTelegramId) return;
   const map: Record<OrderStatus, string> = {
     pending_payment: `Заказ №${order.orderNumber} ожидает оплату.`,
     paid: `Заказ №${order.orderNumber} оплачен. Собираем.`,
@@ -123,7 +127,7 @@ export async function notifyStatus(order: Order, status: OrderStatus) {
     ready: `Заказ №${order.orderNumber} готов к выдаче. ${store.pickup_address}`,
     cancelled: `Заказ №${order.orderNumber} отменён.`,
   };
-  await telegramSend(store.telegram_bot_token, order.buyerTelegramId, map[status]);
+  await telegramSend(token, order.buyerTelegramId, map[status]);
 }
 
 export async function notifyRestock(productName: string, phone: string) {
@@ -135,7 +139,8 @@ export async function notifyRestock(productName: string, phone: string) {
     insert into notification_log (id, store_id, kind, title, body, order_id)
     values (${randomUUID()}, ${store.id}, ${"restock"}, ${title}, ${body}, ${null})
   `;
-  if (store.telegram_bot_token && store.seller_telegram_chat_id) {
-    await telegramSend(store.telegram_bot_token, store.seller_telegram_chat_id, `<b>${title}</b>\n${body}`);
+  const token = resolveBotToken(store.telegram_bot_token);
+  if (token && store.seller_telegram_chat_id) {
+    await telegramSend(token, store.seller_telegram_chat_id, `<b>${title}</b>\n${body}`);
   }
 }

@@ -1,6 +1,7 @@
 type WebApp = {
   ready: () => void;
   expand: () => void;
+  initData?: string;
   initDataUnsafe?: { user?: { id: number } };
 };
 
@@ -19,6 +20,11 @@ export function bootTelegram(): void {
   } catch {
     /* not in Telegram */
   }
+}
+
+export function buyerTelegramInitData(): string | undefined {
+  const data = getWebApp()?.initData;
+  return data?.trim() ? data : undefined;
 }
 
 export function buyerTelegramId(): string | undefined {

@@ -3,6 +3,7 @@ import { getCookie, setCookie } from "@tanstack/react-start/server";
 import { getSql } from "@/lib/db";
 import { getStoreRow } from "./bootstrap.server";
 import { verifyPassword } from "./passwords";
+import { isShopAdmin } from "./telegram.server";
 
 const COOKIE = "exist_admin";
 const WEEK = 7 * 24 * 60 * 60;
@@ -45,14 +46,9 @@ export async function loginAdminByPassword(password: string): Promise<AdminUser 
 }
 
 export async function loginAdminByTelegram(telegramId: string): Promise<AdminUser | null> {
-  const store = await getStoreRow();
+  await getStoreRow();
   const id = telegramId.trim();
-  if (!id) return null;
-  const allowed = (store.admin_telegram_ids ?? "")
-    .split(/[,;\s]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (!allowed.includes(id)) return null;
+  if (!isShopAdmin(id)) return null;
   const sql = await getSql();
   const rows = await sql<AdminUser>`
     select id, store_id, login from admin_users order by created_at limit 1

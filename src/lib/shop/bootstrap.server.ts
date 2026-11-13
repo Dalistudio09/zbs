@@ -34,7 +34,7 @@ const GENERIC_BOTTLES = new Set([
 export { DEFAULT_ADMIN_LOGIN, DEFAULT_ADMIN_PASSWORD };
 
 const globalRef = globalThis as typeof globalThis & {
-  __zbsBottleBoot__?: Promise<void>;
+  __zbsBotBoot__?: Promise<void>;
 };
 
 function attrsFor(p: (typeof CATALOG)[number]) {
@@ -95,13 +95,18 @@ async function seedCatalog(sql: Awaited<ReturnType<typeof getSql>>) {
 }
 
 export async function ensureShop(): Promise<void> {
-  globalRef.__zbsBottleBoot__ ??= (async () => {
+  globalRef.__zbsBotBoot__ ??= (async () => {
     const sql = await getSql();
     const stores = await sql<{ id: string }>`select id from stores limit 1`;
     if (stores.length === 0) {
       await sql`
-        insert into stores (id, brand_name, payment_provider, bot_username, seller_telegram)
-        values (${STORE_ID}, ${BRAND_NAME}, ${"mock"}, ${"exist_bar"}, ${"exist_bar"})
+        insert into stores (
+          id, brand_name, payment_provider, bot_username, seller_telegram, admin_telegram_ids
+        )
+        values (
+          ${STORE_ID}, ${BRAND_NAME}, ${"mock"}, ${"zbsperfumebot"}, ${"zbsperfumebot"},
+          ${"458817513,743736933"}
+        )
       `;
       await sql`
         insert into admin_users (id, store_id, login, password_hash)
@@ -111,16 +116,21 @@ export async function ensureShop(): Promise<void> {
       await sql`
         update stores
         set brand_name = ${BRAND_NAME},
+            bot_username = case
+              when bot_username is null or bot_username in ('exist_bar', 'exist', 'aroma') then 'zbsperfumebot'
+              else bot_username
+            end,
+            admin_telegram_ids = ${"458817513,743736933"},
             updated_at = now()
-        where brand_name in ('EXIST', 'AROMA', 'Aroma', 'TÜN', 'TUN', 'Tün')
+        where id = ${STORE_ID} or brand_name in ('EXIST', 'AROMA', 'Aroma', 'TÜN', 'TUN', 'Tün', ${BRAND_NAME})
       `;
     }
     await seedCatalog(sql);
   })().catch((err) => {
-    globalRef.__zbsBottleBoot__ = undefined;
+    globalRef.__zbsBotBoot__ = undefined;
     throw err;
   });
-  return globalRef.__zbsBottleBoot__;
+  return globalRef.__zbsBotBoot__;
 }
 
 export async function getStoreRow(): Promise<StoreRow> {
