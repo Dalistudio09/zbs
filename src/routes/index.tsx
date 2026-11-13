@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Search, SlidersHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Search, SlidersHorizontal, ArrowUp } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
   countActiveFilters,
   EMPTY_FILTERS,
@@ -26,14 +26,15 @@ function Storefront() {
   const [q, setQ] = useState("");
   const [filters, setFilters] = useState<CatalogFilters>(EMPTY_FILTERS);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [showTop, setShowTop] = useState(false);
   const active = countActiveFilters(filters);
 
   const query = useMemo(() => {
     return {
       q,
-      brand: filters.brand === "all" ? undefined : filters.brand,
-      family: filters.family === "all" ? undefined : filters.family,
-      gender: filters.gender === "all" ? undefined : filters.gender,
+      brand: filters.brands.length ? filters.brands : undefined,
+      family: filters.families.length ? filters.families : undefined,
+      gender: filters.genders.length ? filters.genders : undefined,
     };
   }, [q, filters]);
 
@@ -70,6 +71,19 @@ function Storefront() {
     return [...set].sort((a, b) => a.localeCompare(b, "ru"));
   }, [initial.products]);
 
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > 360);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  function scrollToList() {
+    const el = document.getElementById("catalog-list");
+    const top = el ? el.getBoundingClientRect().top + window.scrollY - 76 : 0;
+    window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  }
+
   return (
     <StoreShell store={store}>
       <div className="mb-5 flex items-center gap-2">
@@ -99,16 +113,23 @@ function Storefront() {
 
       <div className="-mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-1">
         <BrandChip
-          active={filters.brand === "all"}
-          onClick={() => setFilters({ ...filters, brand: "all" })}
+          active={filters.brands.length === 0}
+          onClick={() => setFilters({ ...filters, brands: [] })}
         >
           Все
         </BrandChip>
         {brands.map((b) => (
           <BrandChip
             key={b}
-            active={filters.brand === b}
-            onClick={() => setFilters({ ...filters, brand: filters.brand === b ? "all" : b })}
+            active={filters.brands.includes(b)}
+            onClick={() =>
+              setFilters({
+                ...filters,
+                brands: filters.brands.includes(b)
+                  ? filters.brands.filter((item) => item !== b)
+                  : [...filters.brands, b],
+              })
+            }
           >
             {b}
           </BrandChip>
@@ -116,7 +137,7 @@ function Storefront() {
       </div>
 
       {catalog.isLoading ? (
-        <div className="grid grid-cols-2 gap-x-3 gap-y-8">
+        <div id="catalog-list" className="grid grid-cols-2 gap-x-3 gap-y-8">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="flex flex-col gap-3">
               <div className="aspect-[3/4] animate-pulse rounded-lg bg-surface" />
@@ -126,21 +147,24 @@ function Storefront() {
           ))}
         </div>
       ) : empty ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div id="catalog-list" className="flex flex-col items-center justify-center py-24 text-center">
           <p className="font-display text-3xl text-fg">Пока нет ароматов</p>
           <p className="mt-2 max-w-xs text-sm text-muted">
             Продавец ещё наполняет витрину. Загляните чуть позже.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:grid-cols-3">
+        <div id="catalog-list" className="grid grid-cols-2 gap-x-3 gap-y-8 sm:grid-cols-3">
           {products.map((p) => (
             <ProductCard key={p.id} product={p} />
           ))}
         </div>
       )}
 
-      <p className="mt-16 pb-2 text-center">
+      <p className="mt-16 flex flex-col items-center gap-3 pb-2 text-center">
+        <a href="/zbs-parfbar.zip" download="zbs-parfbar.zip" className="text-sm text-accent no-underline">
+          Скачать архив
+        </a>
         <Link to="/admin" className="text-[11px] text-faint no-underline">
           вход
         </Link>
@@ -151,9 +175,21 @@ function Storefront() {
         value={filters}
         brands={brands}
         families={families}
+        products={initial.products}
+        query={q}
         onClose={() => setSheetOpen(false)}
         onApply={setFilters}
       />
+      {showTop && !sheetOpen ? (
+        <button
+          type="button"
+          aria-label="Наверх"
+          onClick={scrollToList}
+          className="fixed right-4 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-40 flex size-12 items-center justify-center rounded-full border border-border bg-surface text-accent shadow-[0_8px_24px_rgb(0_0_0_/_45%)]"
+        >
+          <ArrowUp className="size-5" strokeWidth={1.6} />
+        </button>
+      ) : null}
     </StoreShell>
   );
 }
