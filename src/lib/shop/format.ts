@@ -8,12 +8,6 @@ export function digitsOnly(value: string): string {
   return value.replace(/\D/g, "");
 }
 
-export function whatsappHref(rawPhone: string, text: string): string {
-  let d = digitsOnly(rawPhone);
-  if (d.startsWith("8") && d.length === 11) d = `7${d.slice(1)}`;
-  return `https://wa.me/${d}?text=${encodeURIComponent(text)}`;
-}
-
 /** Returns 11-digit national form 77XXXXXXXXX or null. */
 export function normalizeKzPhone(input: string): string | null {
   let d = digitsOnly(input);

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getSql } from "@/lib/db";
 import { formatKzt, formatPhonePretty, ORDER_STATUS_LABEL } from "./format";
 import { getStoreRow } from "./bootstrap.server";
-import { resolveBotToken } from "./telegram.server";
+import { resolveBotToken, ADMIN_TELEGRAM_IDS } from "./telegram.server";
 import type { Order, OrderStatus } from "./types";
 
 async function telegramSend(
@@ -67,7 +67,10 @@ export async function notifyNewOrder(order: Order) {
     order.fulfillment === "pickup"
       ? `Самовывоз, ${order.city}`
       : `Доставка, ${order.city}, ${order.address ?? ""}`,
-  ].join("\n");
+    order.comment?.trim() ? `Комментарий: ${order.comment.trim()}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   await sql`
     insert into notification_log (id, store_id, kind, title, body, order_id)
@@ -75,13 +78,15 @@ export async function notifyNewOrder(order: Order) {
   `;
 
   const token = resolveBotToken(store.telegram_bot_token);
-  if (token && store.seller_telegram_chat_id) {
-    await telegramSend(
-      token,
-      store.seller_telegram_chat_id,
-      `<b>${title}</b>\n${body}`,
-      { reply_markup: sellerKeyboard(order.id) },
-    );
+  const chats = new Set<string>(ADMIN_TELEGRAM_IDS);
+  const sellerChat = store.seller_telegram_chat_id?.trim();
+  if (sellerChat) chats.add(sellerChat);
+  if (token) {
+    for (const chatId of chats) {
+      await telegramSend(token, chatId, `<b>${title}</b>\n${body}`, {
+        reply_markup: sellerKeyboard(order.id),
+      });
+    }
   }
 
   if (token && order.buyerTelegramId) {
