@@ -113,7 +113,7 @@ function SettingsPage() {
       <Field label="Текст доставки">
         <Textarea value={deliveryText} onChange={(e) => setDeliveryText(e.target.value)} />
       </Field>
-      <Field label="WhatsApp" hint="Сюда уходит заявка из корзины">
+      <Field label="Телефон" hint="В заявку не уходит">
         <Input value={sellerPhone} onChange={(e) => setSellerPhone(e.target.value)} placeholder="+7 7XX XXX XX XX" />
       </Field>
       <Field label="Telegram продавца">
