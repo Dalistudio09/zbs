@@ -56,9 +56,10 @@ async function seedCatalog(sql: Awaited<ReturnType<typeof getSql>>) {
   }
   const haveRows = await sql<{ id: string }>`select id from products where id like 'cat_%'`;
   const have = new Set(haveRows.map((r) => r.id));
+  const fillCatalog = have.size === 0;
   for (const p of CATALOG) {
     const story = STORIES[p.id];
-    if (!have.has(p.id)) {
+    if (fillCatalog) {
       await sql`
         insert into products (
           id, store_id, name, sku, brand, price_kzt, old_price_kzt,
@@ -73,7 +74,10 @@ async function seedCatalog(sql: Awaited<ReturnType<typeof getSql>>) {
         insert into product_images (id, product_id, sort_order, mime, url)
         values (${`${p.id}_img`}, ${p.id}, ${0}, ${"image/jpeg"}, ${p.image})
       `;
-    } else if (story) {
+      continue;
+    }
+    if (!have.has(p.id)) continue;
+    if (story) {
       const patch = JSON.stringify({ storyTitle: story.title, story: story.body });
       await sql`
         update products
