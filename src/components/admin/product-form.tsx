@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ImagePlus, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { adminSaveProduct } from "@/fn/admin";
+import { adminDeleteProduct, adminSaveProduct } from "@/fn/admin";
 import { compressImageFile } from "@/lib/shop/compress";
 import type { Gender, Product, ProductAttributes, ProductNotes } from "@/lib/shop/types";
 import { Button } from "@/components/ui/button";
@@ -111,6 +111,24 @@ export function ProductForm({ product }: { product?: Product | null }) {
     }
   }
 
+  async function onDelete() {
+    if (!product?.id || busy) return;
+    if (!window.confirm(`Удалить «${product.name}»?`)) return;
+    setBusy(true);
+    try {
+      await adminDeleteProduct({ data: { id: product.id } });
+      await qc.invalidateQueries({ queryKey: ["catalog"] });
+      await qc.invalidateQueries({ queryKey: ["admin-products"] });
+      await qc.invalidateQueries({ queryKey: ["product"] });
+      toast.success("Удалено");
+      navigate({ to: "/admin/products" });
+    } catch {
+      toast.error("Не удалось удалить");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -190,6 +208,11 @@ export function ProductForm({ product }: { product?: Product | null }) {
       <Button block disabled={busy} onClick={() => void onSave()}>
         {busy ? "Сохраняю…" : "Сохранить"}
       </Button>
+      {product ? (
+        <Button variant="danger" block disabled={busy} onClick={() => void onDelete()}>
+          Удалить товар
+        </Button>
+      ) : null}
       <Button variant="ghost" block disabled={busy} onClick={() => navigate({ to: "/admin/products" })}>
         Отмена
       </Button>
