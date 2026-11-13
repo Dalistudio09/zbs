@@ -1,38 +1,40 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import type { Product } from "@/lib/shop/types";
+
+export type GenderFilter = "unisex" | "female" | "male";
 
 export type CatalogFilters = {
-  brand: string;
-  family: string;
-  gender: "all" | "unisex" | "female" | "male";
+  brands: string[];
+  families: string[];
+  genders: GenderFilter[];
 };
 
 export const EMPTY_FILTERS: CatalogFilters = {
-  brand: "all",
-  family: "all",
-  gender: "all",
+  brands: [],
+  families: [],
+  genders: [],
 };
 
 export function countActiveFilters(f: CatalogFilters): number {
-  let n = 0;
-  if (f.brand !== "all") n += 1;
-  if (f.family !== "all") n += 1;
-  if (f.gender !== "all") n += 1;
-  return n;
+  return f.brands.length + f.families.length + f.genders.length;
 }
 
-const GENDER: Array<{ id: CatalogFilters["gender"]; label: string }> = [
-  { id: "all", label: "Все" },
+const GENDER: Array<{ id: GenderFilter; label: string }> = [
   { id: "unisex", label: "Унисекс" },
   { id: "female", label: "Женский" },
   { id: "male", label: "Мужской" },
 ];
+
+const PREVIEW = 8;
 
 export function FilterSheet({
   open,
   value,
   brands,
   families,
+  products,
+  query,
   onClose,
   onApply,
 }: {
@@ -40,6 +42,8 @@ export function FilterSheet({
   value: CatalogFilters;
   brands: string[];
   families: string[];
+  products: Product[];
+  query: string;
   onClose: () => void;
   onApply: (next: CatalogFilters) => void;
 }) {
@@ -63,6 +67,11 @@ export function FilterSheet({
     };
   }, [open]);
 
+  const found = useMemo(
+    () => countMatches(products, draft, query),
+    [products, draft, query],
+  );
+
   if (!open) return null;
 
   function finishDrag(finalY: number) {
@@ -73,6 +82,16 @@ export function FilterSheet({
       return;
     }
     setDy(0);
+  }
+
+  function toggleBrand(id: string) {
+    setDraft({ ...draft, brands: toggle(draft.brands, id) });
+  }
+  function toggleFamily(id: string) {
+    setDraft({ ...draft, families: toggle(draft.families, id) });
+  }
+  function toggleGender(id: GenderFilter) {
+    setDraft({ ...draft, genders: toggle(draft.genders, id) });
   }
 
   return (
@@ -113,64 +132,32 @@ export function FilterSheet({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-5">
           <Section title="Бренд">
-            <div className="flex flex-wrap gap-2">
-              <Chip
-                active={draft.brand === "all"}
-                onClick={() => setDraft({ ...draft, brand: "all" })}
-              >
-                Все
-              </Chip>
-              {brands.map((b) => (
-                <Chip
-                  key={b}
-                  active={draft.brand === b}
-                  onClick={() => setDraft({ ...draft, brand: b })}
-                >
-                  {b}
-                </Chip>
-              ))}
-            </div>
+            <ChipGroup
+              items={brands.map((b) => ({ id: b, label: b }))}
+              selected={draft.brands}
+              onToggle={toggleBrand}
+            />
           </Section>
-
           <Section title="Семейство">
-            <div className="flex flex-wrap gap-2">
-              <Chip
-                active={draft.family === "all"}
-                onClick={() => setDraft({ ...draft, family: "all" })}
-              >
-                Все
-              </Chip>
-              {families.map((f) => (
-                <Chip
-                  key={f}
-                  active={draft.family === f}
-                  onClick={() => setDraft({ ...draft, family: f })}
-                >
-                  {f}
-                </Chip>
-              ))}
-            </div>
+            <ChipGroup
+              items={families.map((f) => ({ id: f, label: f }))}
+              selected={draft.families}
+              onToggle={toggleFamily}
+            />
           </Section>
-
           <Section title="Пол">
-            <div className="flex flex-wrap gap-2">
-              {GENDER.map((g) => (
-                <Chip
-                  key={g.id}
-                  active={draft.gender === g.id}
-                  onClick={() => setDraft({ ...draft, gender: g.id })}
-                >
-                  {g.label}
-                </Chip>
-              ))}
-            </div>
+            <ChipGroup
+              items={GENDER}
+              selected={draft.genders}
+              onToggle={toggleGender}
+            />
           </Section>
         </div>
 
-        <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-border bg-surface px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="flex shrink-0 gap-2 border-t border-border bg-surface px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
-            className="min-h-12 rounded-md border border-border text-sm text-fg"
+            className="min-h-12 shrink-0 rounded-md border border-border px-4 text-sm text-fg"
             onClick={() => {
               onApply(EMPTY_FILTERS);
               onClose();
@@ -180,18 +167,64 @@ export function FilterSheet({
           </button>
           <button
             type="button"
-            className="min-h-12 rounded-md bg-accent text-sm font-medium text-accent-fg"
+            className="min-h-12 min-w-0 flex-1 rounded-md bg-accent px-3 text-sm font-medium text-accent-fg"
             onClick={() => {
               onApply(draft);
               onClose();
             }}
           >
-            Показать
+            {showLabel(found)}
           </button>
         </div>
       </div>
     </div>
   );
+}
+
+function ChipGroup<T extends string>({
+  items,
+  selected,
+  onToggle,
+}: {
+  items: Array<{ id: T; label: string }>;
+  selected: T[];
+  onToggle: (id: T) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const collapsible = items.length > PREVIEW;
+  const visible = collapsible && !expanded ? previewItems(items, selected) : items;
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2">
+        {visible.map((item) => (
+          <Chip
+            key={item.id}
+            active={selected.includes(item.id)}
+            onClick={() => onToggle(item.id)}
+          >
+            {item.label}
+          </Chip>
+        ))}
+      </div>
+      {collapsible ? (
+        <button
+          type="button"
+          className="mt-2 min-h-10 text-sm text-accent"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "Свернуть" : "Показать все"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function previewItems<T extends string>(items: Array<{ id: T; label: string }>, selected: T[]) {
+  const picked = items.filter((item) => selected.includes(item.id));
+  if (picked.length >= PREVIEW) return picked;
+  const rest = items.filter((item) => !selected.includes(item.id));
+  return [...picked, ...rest.slice(0, PREVIEW - picked.length)];
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -217,11 +250,39 @@ function Chip({
       type="button"
       onClick={onClick}
       className={cn(
-        "min-h-11 rounded-full border px-3.5 text-sm",
+        "inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border px-3.5 text-sm",
         active ? "border-accent bg-accent text-accent-fg" : "border-border bg-transparent text-muted",
       )}
     >
       {children}
     </button>
   );
+}
+
+function toggle<T extends string>(list: T[], id: T): T[] {
+  return list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
+}
+
+function countMatches(products: Product[], filters: CatalogFilters, query: string) {
+  const q = query.trim().toLowerCase();
+  const brands = filters.brands.map((b) => b.toLowerCase());
+  const families = filters.families.map((f) => f.toLowerCase());
+  return products.filter((p) => {
+    if (q && !p.name.toLowerCase().includes(q)) return false;
+    if (brands.length && !brands.includes((p.brand ?? "").toLowerCase())) return false;
+    if (families.length && !families.includes((p.attributes.family ?? "").trim().toLowerCase())) return false;
+    if (filters.genders.length && !filters.genders.includes(p.attributes.gender as GenderFilter)) return false;
+    return true;
+  }).length;
+}
+
+function showLabel(n: number) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  let word = "товаров";
+  if (mod100 < 11 || mod100 > 14) {
+    if (mod10 === 1) word = "товар";
+    else if (mod10 >= 2 && mod10 <= 4) word = "товара";
+  }
+  return `Показать ${n} ${word}`;
 }
