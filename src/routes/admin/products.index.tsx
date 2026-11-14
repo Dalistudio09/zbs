@@ -1,9 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
-import { adminProducts, adminToggleVisible } from "@/fn/admin";
+import { useState } from "react";
+import { toast } from "sonner";
+import { adminBroadcast, adminProducts, adminToggleVisible } from "@/fn/admin";
 import { formatKzt } from "@/lib/shop/format";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/field";
 
 export const Route = createFileRoute("/admin/products/")({
   loader: () => adminProducts(),
@@ -19,6 +22,27 @@ function ProductsPage() {
     initialData: initial,
   });
   const products = q.data ?? [];
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [sending, setSending] = useState(false);
+
+  async function sendNotice() {
+    const text = notice.trim();
+    if (!text || sending) return;
+    setSending(true);
+    try {
+      const result = await adminBroadcast({ data: { text } });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.failed ? `Отправлено: ${result.sent}, не дошло: ${result.failed}` : `Отправлено: ${result.sent}`);
+      setNotice("");
+      setNoticeOpen(false);
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <div>
@@ -30,6 +54,25 @@ function ProductsPage() {
             Добавить товар
           </Button>
         </Link>
+      </div>
+      <div className="mb-5">
+        {noticeOpen ? (
+          <div className="flex flex-col gap-3">
+            <Textarea
+              value={notice}
+              onChange={(e) => setNotice(e.target.value)}
+              placeholder="Текст уведомления"
+              rows={4}
+            />
+            <Button block disabled={sending || !notice.trim()} onClick={() => void sendNotice()}>
+              {sending ? "Отправляем…" : "Отправить"}
+            </Button>
+          </div>
+        ) : (
+          <Button variant="ghost" onClick={() => setNoticeOpen(true)}>
+            Отправить уведомление
+          </Button>
+        )}
       </div>
       {products.length === 0 ? (
         <p className="py-12 text-center text-muted">Пока нет ароматов. Добавьте первый.</p>
