@@ -161,10 +161,7 @@ function Storefront() {
         </div>
       )}
 
-      <p className="mt-16 flex flex-col items-center gap-3 pb-2 text-center">
-        <a href="/zbs-parfbar.zip" download="zbs-parfbar.zip" className="text-sm text-accent no-underline">
-          Скачать архив
-        </a>
+      <p className="mt-16 pb-2 text-center">
         <Link to="/admin" className="text-[11px] text-faint no-underline">
           вход
         </Link>
