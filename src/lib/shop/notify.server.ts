@@ -10,21 +10,24 @@ async function telegramSend(
   chatId: string,
   text: string,
   extra?: Record<string, unknown>,
-) {
+  html = true,
+): Promise<boolean> {
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
       text,
-      parse_mode: "HTML",
+      ...(html ? { parse_mode: "HTML" } : {}),
       ...extra,
     }),
   });
   if (!res.ok) {
     const t = await res.text().catch(() => "");
     console.error("[telegram] send failed", res.status, t.slice(0, 200));
+    return false;
   }
+  return true;
 }
 
 function sellerKeyboard(orderId: string) {
@@ -148,4 +151,34 @@ export async function notifyRestock(productName: string, phone: string) {
   if (token && store.seller_telegram_chat_id) {
     await telegramSend(token, store.seller_telegram_chat_id, `<b>${title}</b>\n${body}`);
   }
+}
+
+export async function broadcastManual(text: string): Promise<{ ok: true; sent: number; failed: number } | { ok: false; error: string }> {
+  const message = text.trim();
+  if (!message) return { ok: false, error: "Напишите текст" };
+  const store = await getStoreRow();
+  const token = resolveBotToken(store.telegram_bot_token);
+  if (!token) return { ok: false, error: "Нет токена бота" };
+  const sql = await getSql();
+  const rows = await sql<{ id: string | null }>`
+    select buyer_telegram_id as id from orders
+    where buyer_telegram_id is not null and btrim(buyer_telegram_id) <> ''
+    union
+    select chat_id as id from bot_sessions
+    where chat_id <> 'web-admin' and chat_id not like 'welcome:%'
+  `;
+  const chats = new Set<string>();
+  for (const row of rows) {
+    const id = row.id?.trim() ?? "";
+    if (/^-?\d+$/.test(id)) chats.add(id);
+  }
+  if (chats.size === 0) return { ok: false, error: "Пока некому отправлять" };
+  let sent = 0;
+  let failed = 0;
+  for (const chatId of chats) {
+    const ok = await telegramSend(token, chatId, message, undefined, false);
+    if (ok) sent += 1;
+    else failed += 1;
+  }
+  return { ok: true, sent, failed };
 }

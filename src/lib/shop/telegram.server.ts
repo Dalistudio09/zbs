@@ -233,6 +233,16 @@ async function sendWelcome(token: string, chatId: string, shopUrl: string | null
   });
 }
 
+async function rememberChat(chatId: string) {
+  if (!/^-?\d+$/.test(chatId)) return;
+  const sql = await getSql();
+  await sql`
+    insert into bot_sessions (chat_id, step, draft, updated_at)
+    values (${chatId}, ${"idle"}, ${"{}"}::jsonb, now())
+    on conflict (chat_id) do update set updated_at = now()
+  `;
+}
+
 async function downloadPhoto(token: string, fileId: string): Promise<string | null> {
   const metaRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`);
   const meta = (await metaRes.json()) as { ok?: boolean; result?: { file_path?: string } };
@@ -270,6 +280,7 @@ export async function handleTelegramUpdate(update: TgUpdate, miniAppUrl?: string
   const msg = update.message;
   if (!msg) return;
   const chatId = String(msg.chat.id);
+  await rememberChat(chatId);
   const text = (msg.text || msg.caption || "").trim();
   if (text === "/start" || text.startsWith("/start ")) {
     await sendWelcome(token, chatId, shopUrl);
