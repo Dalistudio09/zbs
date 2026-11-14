@@ -18,7 +18,7 @@ import {
 } from "@/lib/shop/repo.server";
 import { getAdmin, loginAdminByTelegram, logoutAdmin, requireAdmin } from "@/lib/shop/session.server";
 import { getStoreRow } from "@/lib/shop/bootstrap.server";
-import { notifyPayment, notifyStatus } from "@/lib/shop/notify.server";
+import { broadcastManual, notifyPayment, notifyStatus } from "@/lib/shop/notify.server";
 import { handleLocalBotMessage, resolveBotToken, telegramUserFromInitData, isShopAdmin } from "@/lib/shop/telegram.server";
 import type { OrderStatus } from "@/lib/shop/types";
 
@@ -39,6 +39,13 @@ export const adminLogout = createServerFn({ method: "POST" }).handler(async () =
   await logoutAdmin();
   return { ok: true as const };
 });
+
+export const adminBroadcast = createServerFn({ method: "POST" })
+  .validator((d: { text?: string }) => d)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    return broadcastManual(data.text ?? "");
+  });
 
 export const adminMe = createServerFn({ method: "GET" }).handler(async () => {
   const admin = await getAdmin();
