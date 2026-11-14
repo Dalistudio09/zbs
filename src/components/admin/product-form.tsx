@@ -22,6 +22,7 @@ export function ProductForm({ product }: { product?: Product | null }) {
   const [name, setName] = useState(product?.name ?? "");
   const [brand, setBrand] = useState(product?.brand ?? "");
   const [price, setPrice] = useState(product ? String(product.priceKzt) : "");
+  const [stock, setStock] = useState(product ? String(Math.max(0, Number(product.attributes.stock ?? 0))) : "1");
   const [description, setDescription] = useState(product?.description ?? "");
   const [family, setFamily] = useState(product?.attributes.family ?? "");
   const [gender, setGender] = useState<Gender>(product?.attributes.gender ?? "unisex");
@@ -70,7 +71,7 @@ export function ProductForm({ product }: { product?: Product | null }) {
       const attributes: ProductAttributes = {
         gender,
         family: family.trim(),
-        stock: onShelf ? Math.max(1, Number(product?.attributes.stock ?? 1)) : 0,
+        stock: Math.max(0, Math.floor(Number(stock.replace(/\s/g, "")) || 0)),
         year: product?.attributes.year,
         perfumer: product?.attributes.perfumer,
         notes: { top, heart, base },
@@ -173,6 +174,9 @@ export function ProductForm({ product }: { product?: Product | null }) {
       </Field>
       <Field label="Цена за 5 мл, ₸">
         <Input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="21000" />
+      </Field>
+      <Field label="Остаток" hint="Сколько штук в наличии">
+        <Input inputMode="numeric" value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" />
       </Field>
       <Field label="Описание">
         <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
